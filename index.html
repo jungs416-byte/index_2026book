@@ -214,6 +214,40 @@
 
     function escapeHtml(s){ if (s===null||s===undefined) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
+    // --- New: enforce disabling additional "소영반" options once 7 hours reached
+    function updateSoyOptionAvailability() {
+      // Count current "소영반" selections among 책읽기 selects
+      let soyCount = 0;
+      document.querySelectorAll('.read').forEach(s => { if (s.value === '소영반') soyCount++; });
+
+      // For each select, find its "소영반" option and disable/enable it as needed.
+      document.querySelectorAll('.read').forEach(s => {
+        const opt = Array.from(s.options).find(o => o.value === '소영반');
+        if (!opt) return;
+        // Allow keeping "소영반" selected in selects that already have it.
+        if (soyCount >= 7 && s.value !== '소영반') {
+          opt.disabled = true;
+        } else {
+          opt.disabled = false;
+        }
+      });
+      // Keep the existing status message behavior via updateReadingStatus(), but we can append hint if limit reached
+      const div = document.getElementById('readMsg');
+      if (soyCount >= 7) {
+        // If exactly 7 and total hours OK, show a hint that further 소영반 choices are disabled
+        // But do not overwrite any existing error message (like total<14) — only append when condition satisfied.
+        // We'll append a small hint
+        const hint = `<span style="margin-left:8px;color:#666;font-size:12px">(소영반은 최대 7시간 — 다른 소영반 선택은 비활성화됨)</span>`;
+        // If current message already contains bad/ok, just append hint
+        if (div.innerHTML.indexOf('선택') !== -1 || div.innerHTML.indexOf('현재') !== -1) {
+          if (div.innerHTML.indexOf('소영반은') === -1) div.innerHTML = div.innerHTML + hint;
+        } else {
+          // fallback
+          div.innerHTML = `<span class="ok">소영반 ${soyCount}시간 (최대 7시간)</span>` + hint;
+        }
+      }
+    }
+
     // Validation / state update functions
     function checkSelValidity() {
       const ids = ['sel-0126','sel-0127','sel-0128','sel-0129','sel-0202'];
@@ -261,10 +295,12 @@
                 // Conflict — clear and show message
                 this.value = '';
                 document.getElementById('readMsg').innerHTML = `<span class="bad">${day} ${period}교시 중복!</span>`;
+                updateSoyOptionAvailability(); // reflect any change
                 return;
               }
             }
             updateReadingStatus();
+            updateSoyOptionAvailability(); // <-- ensure we disable "소영반" in other selects when limit reached
           }, 60);
         };
         sel.addEventListener('change', onChangeHandler, { passive: false });
@@ -354,7 +390,7 @@
       document.getElementById('submitBtn').addEventListener('click', function(e){ e.preventDefault(); submitRegistration(); }, { passive: false });
 
       // initial update
-      checkSelValidity(); updateReadingStatus(); updateMovieStatus(); updateLouStatus();
+      checkSelValidity(); updateReadingStatus(); updateMovieStatus(); updateLouStatus(); updateSoyOptionAvailability();
 
       // debug info for iPhone troubleshooting
       console.log('UI initialized. userAgent=', navigator.userAgent);
@@ -383,7 +419,7 @@
       document.getElementById('result').innerHTML = html;
 
       // refresh statuses
-      updateReadingStatus(); updateMovieStatus(); updateLouStatus(); checkSelValidity();
+      updateReadingStatus(); updateMovieStatus(); updateLouStatus(); checkSelValidity(); updateSoyOptionAvailability();
     }
 
     // generateCapacityIds (unchanged)
