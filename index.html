@@ -164,8 +164,7 @@
       </div>
     </div>
 
-    <!-- more date blocks... (unchanged) -->
-    <!-- 1/28 -->
+    <!-- other date blocks (unchanged) -->
     <div class="date-block" data-day="1/28(수)">
       <h3>1/28(수)</h3>
       <div class="date-grid">
@@ -222,7 +221,6 @@
       </div>
     </div>
 
-    <!-- 1/29 -->
     <div class="date-block" data-day="1/29(목)">
       <h3>1/29(목)</h3>
       <div class="date-grid">
@@ -279,7 +277,6 @@
       </div>
     </div>
 
-    <!-- 1/30 -->
     <div class="date-block" data-day="1/30(금)">
       <h3>1/30(금)</h3>
       <div class="date-grid">
@@ -328,7 +325,6 @@
       </div>
     </div>
 
-    <!-- 2/2 -->
     <div class="date-block" data-day="2/2(월)">
       <h3>2/2(월)</h3>
       <div class="date-grid">
@@ -337,17 +333,17 @@
           <label>1교시
             <select class="read full" data-day="2/2(월)" data-period="1">
               <option>선택 안함</option><option>승현반</option><option>소영반</option><option>현주반</option><option>현승반</option><option>미리반</option><option>정식반</option>
-            ></select>
+            </select>
           </label>
           <label>2교시
             <select class="read full" data-day="2/2(월)" data-period="2">
               <option>선택 안함</option><option>승현반</option><option>소영반</option><option>현주반</option><option>현승반</option><option>미리반</option><option>정식반</option>
-            ></select>
+            </select>
           </label>
           <label>3교시
             <select class="read full" data-day="2/2(월)" data-period="3">
               <option>선택 안함</option><option>승현반</option><option>소영반</option><option>현주반</option><option>현승반</option><option>미리반</option><option>정식반</option>
-            ></select>
+            </select>
           </label>
         </div>
 
@@ -378,7 +374,6 @@
       </div>
     </div>
 
-    <!-- 2/3 -->
     <div class="date-block" data-day="2/3(화)">
       <h3>2/3(화)</h3>
       <div class="date-grid">
@@ -427,7 +422,6 @@
       </div>
     </div>
 
-    <!-- 2/5 -->
     <div class="date-block" data-day="2/5(목)">
       <h3>2/5(목)</h3>
       <div class="date-grid">
@@ -672,6 +666,51 @@
       });
     }
 
+    // compute total scheduled periods (hours): counts unique day+period occupied by any chosen class
+    function computeTotalScheduledPeriods() {
+      const occupied = new Set();
+      // book reading selections (each occupies its period)
+      document.querySelectorAll('.read').forEach(sel=>{
+        const idx = sel.selectedIndex;
+        if (idx >= 0) {
+          const opt = sel.options[idx];
+          const isPlaceholder = opt && opt.dataset && opt.dataset.placeholder === '1';
+          const val = opt && opt.value ? String(opt.value).trim() : '';
+          if (!isPlaceholder && val !== '') {
+            occupied.add(`${sel.dataset.day}_${sel.dataset.period}`);
+          }
+        }
+      });
+      // bible (1 period each)
+      document.querySelectorAll('.bible:checked').forEach(cb=>{
+        occupied.add(`${cb.dataset.day}_${cb.dataset.period}`);
+      });
+      // lou (1 period each)
+      document.querySelectorAll('.lou:checked').forEach(cb=>{
+        occupied.add(`${cb.dataset.day}_${cb.dataset.period}`);
+      });
+      // movie occupies two consecutive periods (start and start+1)
+      document.querySelectorAll('.mov:checked').forEach(cb=>{
+        const s = Number(cb.dataset.start);
+        occupied.add(`${cb.dataset.day}_${s}`);
+        occupied.add(`${cb.dataset.day}_${s+1}`);
+      });
+      // 선택수업: sel-0126.. sel-0129 occupy 5th period; sel-0202 occupies 4th period
+      const selMap = {'sel-0126':5,'sel-0127':5,'sel-0128':5,'sel-0129':5,'sel-0202':4};
+      Object.entries(selMap).forEach(([id,period])=>{
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const val = sel.value && sel.value.trim();
+        if (val) {
+          // map id to day
+          const idToDay = {'sel-0126':'1/26(월)','sel-0127':'1/27(화)','sel-0128':'1/28(수)','sel-0129':'1/29(목)','sel-0202':'2/2(월)'};
+          const d = idToDay[id];
+          if (d) occupied.add(`${d}_${period}`);
+        }
+      });
+      return occupied.size;
+    }
+
     let seatsIntervalHandle = null;
     function startSeatsPolling(intervalMs = 5000){
       if (seatsIntervalHandle) clearInterval(seatsIntervalHandle);
@@ -701,6 +740,16 @@
       document.querySelectorAll('.bible:checked').forEach(c => mark(c.dataset.day, Number(c.dataset.period), '성경동화'));
       document.querySelectorAll('.mov:checked').forEach(c => { const start = Number(c.dataset.start); mark(c.dataset.day, start, '영화'); mark(c.dataset.day, start+1, '영화'); });
       document.querySelectorAll('.lou:checked').forEach(c => mark(c.dataset.day, Number(c.dataset.period), '마네'));
+      // selection classes
+      const selMap = {'sel-0126':'1/26(월)','sel-0127':'1/27(화)','sel-0128':'1/28(수)','sel-0129':'1/29(목)','sel-0202':'2/2(월)'};
+      Object.entries(selMap).forEach(([id,day])=>{
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const val = sel.value && sel.value.trim();
+        if (!val) return;
+        const period = (id === 'sel-0202') ? 4 : 5;
+        mark(day, period, '선택수업');
+      });
       return occ;
     }
 
@@ -792,23 +841,24 @@
       const name = document.getElementById('name').value.trim();
       if (!cls || !name) { alert('반과 이름을 입력하세요.'); return; }
 
-      // Robust counting using helpers
+      // Ensure per-day book reading and total book reading hours
       const totalRead = countReadSelections();
-
-      // requiredDays: ensure at least 1 읽기 selection on each required day
       const requiredDays = ["1/27(화)","1/28(수)","1/29(목)","1/30(금)","2/2(월)","2/3(화)","2/5(목)"];
-      let missingDay = null;
       for (const d of requiredDays) {
-        if (!hasReadOnDay(d)) { missingDay = d; break; }
+        if (!hasReadOnDay(d)) {
+          alert(`${d}에 책읽기 수업을 1교시 이상 선택해야 합니다.`);
+          return;
+        }
       }
-
-      if (missingDay) {
-        alert(`${missingDay}에 책읽기 수업을 1교시 이상 선택해야 합니다.`);
+      if (totalRead < 14) {
+        alert(`책읽기 시간이 부족합니다. 현재 ${totalRead}시간, 14시간 이상 필요합니다.`);
         return;
       }
 
-      if (totalRead < 14) {
-        alert(`책읽기 시간이 부족합니다. 현재 ${totalRead}시간, 14시간 이상 필요합니다.`);
+      // New requirement: overall scheduled periods (hours) must be at least 31
+      const totalScheduled = computeTotalScheduledPeriods();
+      if (totalScheduled < 31) {
+        alert('전체 수업 시수 확인해주세요');
         return;
       }
 
