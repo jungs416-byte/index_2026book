@@ -850,6 +850,12 @@
       return cnt;
     }
 
+    // Helper: count 영화 selections in first week (1/27 ~ 1/30)
+    function countFirstWeekMovieSelections() {
+      const FIRST_WEEK_DAYS = new Set(["1/27(화)","1/28(수)","1/29(목)","1/30(금)"]);
+      return Array.from(document.querySelectorAll('.mov:checked')).reduce((acc, m) => acc + (FIRST_WEEK_DAYS.has(m.dataset.day) ? 1 : 0), 0);
+    }
+
     async function submitRegistration(){
       const btn = document.getElementById('submitBtn');
       const cls = document.getElementById('cls').value.trim();
@@ -889,6 +895,18 @@
       const soyoungCount = countSoYoungSelections();
       if (soyoungCount > 6) {
         alert('소영반은 전체 기간 동안 최대 6회까지 선택할 수 있습니다.');
+        return;
+      }
+
+      // Enforce movie limits again at submit time (safety)
+      const movCnt = document.querySelectorAll('.mov:checked').length;
+      if (movCnt > 3) {
+        alert('영화 선택 3회까지 가능합니다');
+        return;
+      }
+      const firstWeekMovCnt = countFirstWeekMovieSelections();
+      if (firstWeekMovCnt > 2) {
+        alert('첫주에 2회 시청가능합니다');
         return;
       }
 
@@ -1079,13 +1097,39 @@
         }, { passive: false });
       });
 
+      // Movie selection handler - updated to enforce:
+      //  - First week (1/27 ~ 1/30) max 2
+      //  - Overall movies max 3, show popup when attempting 4th
+      //  - Preserve conflict checks and per-day exclusivity
+      const FIRST_WEEK_DAYS = new Set(["1/27(화)","1/28(수)","1/29(목)","1/30(금)"]);
       document.querySelectorAll('.mov').forEach(cb => {
         cb.addEventListener('change', function(){
           const day = this.dataset.day;
           if (this.checked) {
+            // ensure only one movie block per day (1-2 or 3-4)
             document.querySelectorAll('.mov').forEach(m => { if (m !== this && m.dataset.day === day && m.checked) m.checked = false; });
-            let total = document.querySelectorAll('.mov:checked').length;
-            if (total > 3) { this.checked = false; document.getElementById('movMsg').innerHTML = '<span class="bad">영화는 최대 3회까지만 선택 가능합니다.</span>'; updateMovieStatus(); return; }
+
+            // Count first-week movie selections (including this one)
+            const firstWeekCount = Array.from(document.querySelectorAll('.mov:checked')).reduce((acc, m) => acc + (FIRST_WEEK_DAYS.has(m.dataset.day) ? 1 : 0), 0);
+            if (firstWeekCount > 2) {
+              // revert
+              this.checked = false;
+              alert('첫주에 2회 시청가능합니다');
+              updateMovieStatus();
+              return;
+            }
+
+            // Count total movie selections (including this one)
+            const total = document.querySelectorAll('.mov:checked').length;
+            if (total > 3) {
+              // revert and warn
+              this.checked = false;
+              alert('영화 선택 3회까지 가능합니다');
+              updateMovieStatus();
+              return;
+            }
+
+            // schedule conflict: movie occupies two periods (start, start+1)
             const s = Number(this.dataset.start);
             const occ = buildScheduleOccupation();
             for (let p of [s, s+1]) {
@@ -1095,6 +1139,7 @@
                 return;
               }
             }
+
             document.getElementById('movMsg').innerHTML = '';
           } else {
             document.getElementById('movMsg').innerHTML = '';
