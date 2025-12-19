@@ -1002,7 +1002,7 @@
       // also enforce second-week constraint (2/2 - 2/5) before submit
       const SECOND_WEEK_DAYS = new Set(["2/2(월)","2/3(화)","2/4(수)","2/5(목)"]);
       const secondWeekMovCnt = Array.from(document.querySelectorAll('.mov:checked')).reduce((acc, m) => acc + (SECOND_WEEK_DAYS.has(m.dataset.day) ? 1 : 0), 0);
-      if (secondWeekMovCnt > 1) { alert('이번주에는 1회만 가능합니다'); return; }
+      if (secondWeekMovCnt > 1) { alert('두 번째 주는 영화 1회 선택만 가능합니다'); return; }
 
       // proceed to DB save (same pattern as earlier)
       btn.disabled = true; btn.textContent = '제출 중...';
@@ -1224,7 +1224,7 @@
 
       // mov handlers (apricot color applied in makeTable via class)
       const FIRST_WEEK_DAYS = new Set(["1/27(화)","1/28(수)","1/29(목)","1/30(금)"]);
-      const SECOND_WEEK_DAYS = new Set(["2/2(월)","2/3(화)","2/4(수)","2/5(목)"]); // new constraint window
+      const SECOND_WEEK_DAYS = new Set(["2/2(월)","2/3(화)","2/4(수)","2/5(목)"]); // enforced window
       document.querySelectorAll('.mov').forEach(cb => {
         cb.addEventListener('change', function(){
           const day = this.dataset.day;
@@ -1232,13 +1232,16 @@
             // ensure only one mov per same day (existing behavior)
             document.querySelectorAll('.mov').forEach(m => { if (m !== this && m.dataset.day === day && m.checked) m.checked = false; });
 
-            // check second-week (2/2~2/5) constraint: only 1 movie allowed in that period
-            const secondWeekCount = Array.from(document.querySelectorAll('.mov:checked')).reduce((acc, m) => acc + (SECOND_WEEK_DAYS.has(m.dataset.day) ? 1 : 0), 0);
-            if (SECOND_WEEK_DAYS.has(this.dataset.day) && secondWeekCount > 1) {
-              this.checked = false;
-              alert('이번주에는 1회만 가능합니다');
-              updateSummaryLine();
-              return;
+            // New robust check: count other already-checked movies in second week (exclude this)
+            if (SECOND_WEEK_DAYS.has(this.dataset.day)) {
+              const otherSecondWeekChecked = Array.from(document.querySelectorAll('.mov:checked')).filter(m => m !== this && SECOND_WEEK_DAYS.has(m.dataset.day)).length;
+              if (otherSecondWeekChecked >= 1) {
+                // prevent selecting a second movie in second week
+                this.checked = false;
+                alert('두 번째 주는 영화 1회 선택만 가능합니다');
+                updateSummaryLine();
+                return;
+              }
             }
 
             // existing first-week & overall checks
