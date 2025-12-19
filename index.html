@@ -565,7 +565,7 @@
             if (sel.selectedIndex === i) sel.selectedIndex = 0;
             sel.remove(i);
           }
-        }
+        });
       });
     }
 
@@ -999,6 +999,11 @@
       const firstWeekMovCnt = countFirstWeekMovieSelections();
       if (firstWeekMovCnt > 2) { alert('첫주에 2회 시청가능합니다'); return; }
 
+      // also enforce second-week constraint (2/2 - 2/5) before submit
+      const SECOND_WEEK_DAYS = new Set(["2/2(월)","2/3(화)","2/4(수)","2/5(목)"]);
+      const secondWeekMovCnt = Array.from(document.querySelectorAll('.mov:checked')).reduce((acc, m) => acc + (SECOND_WEEK_DAYS.has(m.dataset.day) ? 1 : 0), 0);
+      if (secondWeekMovCnt > 1) { alert('이번주에는 1회만 가능합니다'); return; }
+
       // proceed to DB save (same pattern as earlier)
       btn.disabled = true; btn.textContent = '제출 중...';
       try {
@@ -1219,15 +1224,30 @@
 
       // mov handlers (apricot color applied in makeTable via class)
       const FIRST_WEEK_DAYS = new Set(["1/27(화)","1/28(수)","1/29(목)","1/30(금)"]);
+      const SECOND_WEEK_DAYS = new Set(["2/2(월)","2/3(화)","2/4(수)","2/5(목)"]); // new constraint window
       document.querySelectorAll('.mov').forEach(cb => {
         cb.addEventListener('change', function(){
           const day = this.dataset.day;
           if (this.checked) {
+            // ensure only one mov per same day (existing behavior)
             document.querySelectorAll('.mov').forEach(m => { if (m !== this && m.dataset.day === day && m.checked) m.checked = false; });
+
+            // check second-week (2/2~2/5) constraint: only 1 movie allowed in that period
+            const secondWeekCount = Array.from(document.querySelectorAll('.mov:checked')).reduce((acc, m) => acc + (SECOND_WEEK_DAYS.has(m.dataset.day) ? 1 : 0), 0);
+            if (SECOND_WEEK_DAYS.has(this.dataset.day) && secondWeekCount > 1) {
+              this.checked = false;
+              alert('이번주에는 1회만 가능합니다');
+              updateSummaryLine();
+              return;
+            }
+
+            // existing first-week & overall checks
             const firstWeekCount = Array.from(document.querySelectorAll('.mov:checked')).reduce((acc, m) => acc + (FIRST_WEEK_DAYS.has(m.dataset.day) ? 1 : 0), 0);
             if (firstWeekCount > 2) { this.checked = false; alert('첫주에 2회 시청가능합니다'); updateSummaryLine(); return; }
+
             const total = document.querySelectorAll('.mov:checked').length;
             if (total > 3) { this.checked = false; alert('영화 선택 3회까지 가능합니다'); updateSummaryLine(); return; }
+
             const s = Number(this.dataset.start);
             const occ = buildScheduleOccupation();
             for (let p of [s, s+1]) {
@@ -1237,6 +1257,7 @@
                 return;
               }
             }
+
             document.getElementById('movMsg').innerHTML = '';
           } else {
             document.getElementById('movMsg').innerHTML = '';
