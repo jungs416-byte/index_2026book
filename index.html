@@ -565,7 +565,7 @@
             if (sel.selectedIndex === i) sel.selectedIndex = 0;
             sel.remove(i);
           }
-        });
+        }
       });
     }
 
@@ -838,6 +838,12 @@
       return Array.from(document.querySelectorAll('.mov:checked')).reduce((acc, m) => acc + (FIRST_WEEK_DAYS.has(m.dataset.day) ? 1 : 0), 0);
     }
 
+    // Helper: count 영화 selections in second week specific days (2/2, 2/3, 2/5)
+    function countSecondWeekMovieSelections() {
+      const SECOND_WEEK_DAYS = new Set(["2/2(월)","2/3(화)","2/5(목)"]);
+      return Array.from(document.querySelectorAll('.mov:checked')).reduce((acc, m) => acc + (SECOND_WEEK_DAYS.has(m.dataset.day) ? 1 : 0), 0);
+    }
+
     // Map label -> css class used in table
     function getCellClassForLabel(label) {
       if (!label) return '';
@@ -998,11 +1004,8 @@
       if (movCnt > 3) { alert('영화 선택 3회까지 가능합니다'); return; }
       const firstWeekMovCnt = countFirstWeekMovieSelections();
       if (firstWeekMovCnt > 2) { alert('첫주에 2회 시청가능합니다'); return; }
-
-      // also enforce second-week constraint (2/2 - 2/5) before submit
-      const SECOND_WEEK_DAYS = new Set(["2/2(월)","2/3(화)","2/4(수)","2/5(목)"]);
-      const secondWeekMovCnt = Array.from(document.querySelectorAll('.mov:checked')).reduce((acc, m) => acc + (SECOND_WEEK_DAYS.has(m.dataset.day) ? 1 : 0), 0);
-      if (secondWeekMovCnt > 1) { alert('두 번째 주는 영화 1회 선택만 가능합니다'); return; }
+      const secondWeekMovCnt = countSecondWeekMovieSelections();
+      if (secondWeekMovCnt > 1) { alert('둘째주에는 1회만 시청가능합니다'); return; }
 
       // proceed to DB save (same pattern as earlier)
       btn.disabled = true; btn.textContent = '제출 중...';
@@ -1010,8 +1013,10 @@
         const { data: studentData, error: selectError } = await supabaseClient.from('students').select('student_id').eq('class', cls).eq('name', name);
         if (selectError) throw new Error('학생 조회 실패: ' + selectError.message);
         let studentId;
-        if (studentData && studentData.length > 0) studentId = studentData[0].student_id;
-        else {
+        const wasExistingStudent = (studentData && studentData.length > 0); // <-- 기존에 학생이 DB에 있었는지 여부
+        if (wasExistingStudent) {
+          studentId = studentData[0].student_id;
+        } else {
           const { data: insertData, error: insertError } = await supabaseClient.from('students').insert([{ class: cls, name: name }]).select('student_id').single();
           if (insertError) throw new Error('학생 등록 실패: ' + insertError.message);
           studentId = insertData.student_id;
@@ -1047,7 +1052,13 @@
         const { error: regError } = await supabaseClient.from('registrations').insert(records);
         if (regError) throw new Error('수강 신청 실패 (DB 오류): ' + regError.message);
 
-        alert('✅ 신청 완료!');
+        // 메시지 분기: 신규 학생이면 '신청 완료😁', 기존 학생이면 '수정 완료😅'
+        if (wasExistingStudent) {
+          alert('수정 완료😅');
+        } else {
+          alert('신청 완료😁');
+        }
+
         makeTable();
         refreshReadAndSelRemaining();
       } catch (err) {
@@ -1224,30 +1235,23 @@
 
       // mov handlers (apricot color applied in makeTable via class)
       const FIRST_WEEK_DAYS = new Set(["1/27(화)","1/28(수)","1/29(목)","1/30(금)"]);
-      const SECOND_WEEK_DAYS = new Set(["2/2(월)","2/3(화)","2/4(수)","2/5(목)"]); // enforced window
+      const SECOND_WEEK_DAYS = new Set(["2/2(월)","2/3(화)","2/5(목)"]); // 둘째주 영화 제한 대상
       document.querySelectorAll('.mov').forEach(cb => {
         cb.addEventListener('change', function(){
           const day = this.dataset.day;
           if (this.checked) {
-            // ensure only one mov per same day (existing behavior)
+            // uncheck other movie options on the same day
             document.querySelectorAll('.mov').forEach(m => { if (m !== this && m.dataset.day === day && m.checked) m.checked = false; });
 
-            // New robust check: count other already-checked movies in second week (exclude this)
-            if (SECOND_WEEK_DAYS.has(this.dataset.day)) {
-              const otherSecondWeekChecked = Array.from(document.querySelectorAll('.mov:checked')).filter(m => m !== this && SECOND_WEEK_DAYS.has(m.dataset.day)).length;
-              if (otherSecondWeekChecked >= 1) {
-                // prevent selecting a second movie in second week
-                this.checked = false;
-                alert('두 번째 주는 영화 1회 선택만 가능합니다');
-                updateSummaryLine();
-                return;
-              }
-            }
-
-            // existing first-week & overall checks
+            // first-week constraint (unchanged)
             const firstWeekCount = Array.from(document.querySelectorAll('.mov:checked')).reduce((acc, m) => acc + (FIRST_WEEK_DAYS.has(m.dataset.day) ? 1 : 0), 0);
             if (firstWeekCount > 2) { this.checked = false; alert('첫주에 2회 시청가능합니다'); updateSummaryLine(); return; }
 
+            // second-week constraint for specific days: only 1 movie across 2/2,2/3,2/5
+            const secondWeekCount = Array.from(document.querySelectorAll('.mov:checked')).reduce((acc, m) => acc + (SECOND_WEEK_DAYS.has(m.dataset.day) ? 1 : 0), 0);
+            if (secondWeekCount > 1) { this.checked = false; alert('둘째주에는 1회만 시청가능합니다'); updateSummaryLine(); return; }
+
+            // overall movie count constraint (unchanged)
             const total = document.querySelectorAll('.mov:checked').length;
             if (total > 3) { this.checked = false; alert('영화 선택 3회까지 가능합니다'); updateSummaryLine(); return; }
 
@@ -1260,7 +1264,6 @@
                 return;
               }
             }
-
             document.getElementById('movMsg').innerHTML = '';
           } else {
             document.getElementById('movMsg').innerHTML = '';
